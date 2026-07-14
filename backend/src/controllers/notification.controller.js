@@ -4,7 +4,7 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const createNotification = asyncHandler(async (req, res) => {
 
-    const notification = await notificationService.create(req.body)
+    const notification = await notificationService.createNotification(req.body)
 
     return res.status(201).json({
         success: true,
@@ -12,9 +12,9 @@ const createNotification = asyncHandler(async (req, res) => {
     });
 });
 
-const getNotifications = asyncHandler(async (req, res) => {
+const getAllNotifications = asyncHandler(async (req, res) => {
 
-    const notifications = await notificationService.getAll();
+    const notifications = await notificationService.getAllNotifications();
 
     return res.json({
         success: true,
@@ -23,25 +23,19 @@ const getNotifications = asyncHandler(async (req, res) => {
 
 });
 const getNotificationById = asyncHandler(async (req,res)=>{
-    const id=Number(req.params.id)
-    const notification = await notificationService.getById(id);
-    if(!notification){
-        return res.status(404).json({
-            success:false,
-            Message:"Notification not found"
-        })
-
-    }
+    const notificationId=Number(req.params.id)
+    const notification = await notificationService.getNotificationById(notificationId);
+    
     return res.status(200).json({
         success:true,
         data:notification,
     })
 })
 
-const updateNotificationById =asyncHandler(async (req,res)=>{
-    const id=Number(req.params.id);
+const updateNotificationStatus =asyncHandler(async (req,res)=>{
+    const notificationId=Number(req.params.id);
     const status=req.body.status;
-    const notification = await notificationService.updateStatus(id,status)
+    const notification = await notificationService.updateNotificationStatus(notificationId,status)
     return res.status(200).json({
         success:true,
         data:notification
@@ -49,9 +43,9 @@ const updateNotificationById =asyncHandler(async (req,res)=>{
     
 })
 
-const deleteNotificationById= asyncHandler(async (req,res)=>{
-    const id = Number(req.params.id)
-    await notificationService.remove(id);
+const deleteNotification= asyncHandler(async (req,res)=>{
+    const notificationId = Number(req.params.id)
+    await notificationService.deleteNotification(notificationId);
     return res.status(200).json({
         success:true,
         message:"Notification deleted successfully "
@@ -60,8 +54,8 @@ const deleteNotificationById= asyncHandler(async (req,res)=>{
 
 module.exports = {
     createNotification,
-    getNotifications,
+    getAllNotifications,
     getNotificationById,
-    updateNotificationById,
-    deleteNotificationById
+    updateNotificationStatus,
+    deleteNotification
 };

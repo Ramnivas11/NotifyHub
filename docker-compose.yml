@@ -1,0 +1,15 @@
+services:
+  redis:
+    image: redis:8
+    container_name: notifyhub-redis
+
+    ports:
+      - "6379:6379"
+
+    restart: unless-stopped
+
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

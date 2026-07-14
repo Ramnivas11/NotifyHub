@@ -8,7 +8,7 @@ const { createNotificationSchema } = require("../validations/notification.valida
 
 const notificationController = require("../controllers/notification.controller");
 
-router.get("/", notificationController.getNotifications);
+router.get("/", notificationController.getAllNotifications);
 router.get("/:id", notificationController.getNotificationById);
 
 router.post(
@@ -17,8 +17,8 @@ router.post(
     notificationController.createNotification
 );
 
-router.patch("/:id/status", notificationController.updateNotificationById);
-router.delete("/:id", notificationController.deleteNotificationById);
+router.patch("/:id/status", notificationController.updateNotificationStatus);
+router.delete("/:id", notificationController.deleteNotification);
 
 
 module.exports = router;

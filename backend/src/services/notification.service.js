@@ -1,14 +1,22 @@
 const prisma = require("../lib/prisma");
+const AppError = require("../utils/AppError");
+const notificationQueue = require("../queues/notification.queue");
+const createNotification = async (notificationData) => {
 
-const create = async (data) => {
-
-    return prisma.notification.create({
-        data,
+    const notification = await prisma.notification.create({
+        data: notificationData,
     });
+
+
+    await notificationQueue.add("send-notification",{
+        notificationId:notification.id
+    })
+
+    return notification;
 
 };
 
-const getAll = async () => {
+const getAllNotifications = async () => {
 
     return prisma.notification.findMany({
         orderBy: {
@@ -17,37 +25,49 @@ const getAll = async () => {
     });
 
 };
-const getById = async(id)=>{
-    return prisma.notification.findUnique(({
+const getNotificationById = async(notificationId)=>{
+    const notification = await prisma.notification.findUnique(({
         where:{
-            id
+            id: notificationId
         }
     }))
+    if(!notification){
+        throw new AppError("Notification not found", 404);
+    }
+    return notification
 }
 
-const updateStatus = async(id,status)=>{
-    return prisma.notification.update({
+const updateNotificationStatus = async(notificationId,status)=>{
+    const notification = await prisma.notification.update({
         where:{
-            id,
+            id: notificationId,
         },
         data:{
             status,
         },
     })
+    if(!notification){
+        throw new AppError("Notification not found", 404);
+    }
+    return notification
 }
 
-const remove=async(id)=>{
-    return prisma.notification.delete({
+const deleteNotification = async(notificationId)=>{
+    const notification = await prisma.notification.delete({
         where:{
-            id,
+            id: notificationId,
         }
     })
+    if(!notification){
+        throw new AppError("Notification not found", 404);
+    }
+    return notification
 }
 
 module.exports = {
-    create,
-    getAll,
-    getById,
-    updateStatus,
-    remove,
+    createNotification,
+    getAllNotifications,
+    getNotificationById,
+    updateNotificationStatus,
+    deleteNotification,
 };
