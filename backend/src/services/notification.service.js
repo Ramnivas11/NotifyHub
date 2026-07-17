@@ -1,3 +1,4 @@
+
 const prisma = require("../lib/prisma");
 const AppError = require("../utils/AppError");
 const notificationQueue = require("../queues/notification.queue");
@@ -63,6 +64,45 @@ const deleteNotification = async(notificationId)=>{
     }
     return notification
 }
+async function processNotification(notificationId) {
+    const notification = await prisma.notification.findUnique({
+        where: {
+            id: notificationId,
+        },
+    });
+
+    if (!notification) {
+        throw new AppError("Notification not found", 404);
+    }
+
+    await prisma.notification.update({
+        where: {
+            id: notificationId,
+        },
+        data: {
+            status: "PROCESSING",
+        },
+    });
+
+    console.log(
+        `📨 Sending notification ${notification.id} to ${notification.recipient}`
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    await prisma.notification.update({
+        where: {
+            id: notificationId,
+        },
+        data: {
+            status: "SENT",
+        },
+    });
+
+    return {
+        message: "Notification processed successfully",
+    };
+}
 
 module.exports = {
     createNotification,
@@ -70,4 +110,5 @@ module.exports = {
     getNotificationById,
     updateNotificationStatus,
     deleteNotification,
+    processNotification
 };
