@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Notification {
@@ -15,4 +14,27 @@ model Notification {
   message    String
   status     String   @default("PENDING")
   createdAt  DateTime @default(now())
+
+  idempotency Idempotency?
+}
+
+model Idempotency {
+  id                  Int            @id @default(autoincrement())
+  key                 String         @unique
+  requestHash         String
+  status              String
+  response            Json?
+
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+
+  lastError           String?
+
+  expiresAt           DateTime
+
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  notificationId      Int?           @unique
+  notification        Notification? @relation(fields: [notificationId], references: [id])
 }
