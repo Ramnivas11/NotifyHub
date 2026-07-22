@@ -2,11 +2,13 @@ const prisma = require("../lib/prisma");
 const {
     IDEMPOTENCY_ACTION,
     IDEMPOTENCY_STATUS,
+    IDEMPOTENCY_EXPIRY,
 } = require("../constants/idempotency.constants");
 
 class IdempotencyService {
-    async beginRequest(key, requestHash, expiresAt) {
+    async beginRequest(key, requestHash) {
         try {
+            const expiresAt = new Date(Date.now() + IDEMPOTENCY_EXPIRY.HOURS * 60 * 60 * 1000);
             const record = await prisma.idempotency.create({
                 data: {
                     key,
@@ -22,6 +24,7 @@ class IdempotencyService {
                 record,
             };
         } catch (err) {
+            //p2002 is unique constraint violation
             if (err.code !== "P2002") {
                 throw err;
             }
