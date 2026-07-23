@@ -27,7 +27,7 @@ async function idempotencyMiddleware(req, res, next) {
             case IDEMPOTENCY_ACTION.NEW:
             case IDEMPOTENCY_ACTION.FAILED:
                 req.idempotency = {
-                    key, requestHash
+                    key,
                 }
                 return next();
             case IDEMPOTENCY_ACTION.PROCESSING:

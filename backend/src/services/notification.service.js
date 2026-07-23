@@ -1,20 +1,36 @@
-
+const idempotencyService = require("./idempotency.service");
 const prisma = require("../lib/prisma");
 const AppError = require("../utils/AppError");
 const notificationQueue = require("../queues/notification.queue");
-const createNotification = async (notificationData) => {
 
-    const notification = await prisma.notification.create({
-        data: notificationData,
-    });
+const createNotification = async (notificationData, idempotency = null) => {
+
 
     try {
+        const notification = await prisma.notification.create({
+            data: notificationData,
+        });
         await notificationQueue.add("send-notification", {
             notificationId: notification.id,
         });
+        const response = {
+            success: true,
+            message: "Notification created successfully.",
+            data: notification,
+        };
+        if (idempotency) {
+            await idempotencyService.completeRequest(
+                idempotency.key,
+                notification.id,
+                response
+            );
+        }
 
-        return notification;
+        return response;
     } catch (err) {
+        if (idempotency) {
+            await idempotencyService.failRequest(idempotency.key, err);
+        }
         await updateNotificationStatus(notification.id, "FAILED");
         throw err;
     }
