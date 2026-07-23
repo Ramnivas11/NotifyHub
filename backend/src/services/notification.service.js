@@ -31,7 +31,7 @@ const createNotification = async (notificationData, idempotency = null) => {
         if (idempotency) {
             await idempotencyService.failRequest(idempotency.key, err);
         }
-        await updateNotificationStatus(notification.id, "FAILED");
+        await updateNotificationStatus(notification?.id, "FAILED");
         throw err;
     }
 
