@@ -4,12 +4,9 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const createNotification = asyncHandler(async (req, res) => {
 
-    const notification = await notificationService.createNotification(req.body, req.idempotency)
+    const response = await notificationService.createNotification(req.body, req.idempotency)
 
-    return res.status(201).json({
-        success: true,
-        data: notification,
-    });
+    return res.status(201).json(response);
 });
 
 const getAllNotifications = asyncHandler(async (req, res) => {

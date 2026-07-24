@@ -4,20 +4,29 @@ const AppError = require("../utils/AppError");
 const notificationQueue = require("../queues/notification.queue");
 
 const createNotification = async (notificationData, idempotency = null) => {
-
+    let notification = null;
 
     try {
-        const notification = await prisma.notification.create({
+        notification = await prisma.notification.create({
             data: notificationData,
         });
-        await notificationQueue.add("send-notification", {
-            notificationId: notification.id,
-        });
+
+        await notificationQueue.add(
+            "send-notification",
+            {
+                notificationId: notification.id,
+            },
+            {
+                jobId: notification.id,
+            }
+        );
+
         const response = {
             success: true,
             message: "Notification created successfully.",
             data: notification,
         };
+
         if (idempotency) {
             await idempotencyService.completeRequest(
                 idempotency.key,
@@ -29,12 +38,29 @@ const createNotification = async (notificationData, idempotency = null) => {
         return response;
     } catch (err) {
         if (idempotency) {
-            await idempotencyService.failRequest(idempotency.key, err);
+            try {
+                await idempotencyService.failRequest(idempotency.key, err);
+            } catch (cleanupErr) {
+                console.error(
+                    "Failed to mark idempotency request as failed",
+                    cleanupErr
+                );
+            }
         }
-        await updateNotificationStatus(notification?.id, "FAILED");
+
+        if (notification?.id) {
+            try {
+                await updateNotificationStatus(notification.id, "FAILED");
+            } catch (cleanupErr) {
+                console.error(
+                    `Failed to update notification ${notification.id} status to FAILED`,
+                    cleanupErr
+                );
+            }
+        }
+
         throw err;
     }
-
 };
 
 const getAllNotifications = async () => {
@@ -83,14 +109,20 @@ const deleteNotification = async (notificationId) => {
 async function processNotification(notificationId) {
     try {
 
-        const notification = await getNotificationById(notificationId)
-        if (notification.status === "SENT") {
+        const [notification] = await prisma.notification.updateManyAndReturn({
+            where: {
+                id: notificationId,
+                status: "PENDING",
+            },
+            data: {
+                status: "PROCESSING",
+            },
+        })
+        if (!notification) {
             return {
-                message: "Notification already processed",
+                message: "Notification already being processed or already completed",
             };
         }
-
-        await updateNotificationStatus(notificationId, "PROCESSING");
 
         console.log(
             `📨 Sending notification ${notification.id} to ${notification.recipient}`
@@ -101,6 +133,7 @@ async function processNotification(notificationId) {
         await updateNotificationStatus(notificationId, "SENT");
 
         return {
+            success: true,
             message: "Notification processed successfully",
         };
     } catch (err) {
