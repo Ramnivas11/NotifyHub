@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const { Worker } = require("bullmq");
 const notificationService = require("../services/notification.service");
+const ProviderFactory = require("../providers/email/provider.factory")
 const redis = require("../config/redis");
 const prisma = require("../lib/prisma");
 
@@ -12,7 +13,8 @@ const worker = new Worker(
         console.log("📥 Job Received");
         console.log(job.id);
         console.log(job.data);
-        await notificationService.processNotification(job.data.notificationId);
+        const provider = ProviderFactory.getProvider();
+        await notificationService.processNotification(job.data.notificationId, provider);
     },
 
     {

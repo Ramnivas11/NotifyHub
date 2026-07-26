@@ -106,7 +106,7 @@ const deleteNotification = async (notificationId) => {
 
     return notification
 }
-async function processNotification(notificationId) {
+async function processNotification(notificationId, provider) {
     try {
 
         const [notification] = await prisma.notification.updateManyAndReturn({
@@ -127,10 +127,13 @@ async function processNotification(notificationId) {
         console.log(
             `📨 Sending notification ${notification.id} to ${notification.recipient}`
         );
-
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-
-        await updateNotificationStatus(notificationId, "SENT");
+        try {
+            await provider.send(notification);
+            await updateNotificationStatus(notificationId, "SENT");
+        } catch (error) {
+            await updateNotificationStatus(notificationId, "FAILED");
+            throw error;
+        }
 
         return {
             success: true,
