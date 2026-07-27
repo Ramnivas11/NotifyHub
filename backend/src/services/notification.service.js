@@ -128,6 +128,8 @@ async function processNotification(notificationId, provider) {
             `📨 Sending notification ${notification.id} to ${notification.recipient}`
         );
         try {
+            const ProviderFactory = require("../providers/email/provider.factory");
+            const provider = ProviderFactory.getProvider();
             await provider.send(notification);
             await updateNotificationStatus(notificationId, "SENT");
         } catch (error) {
