@@ -2,9 +2,22 @@ const BaseEmailProvider = require("./base.provider");
 
 class MockProvider extends BaseEmailProvider {
     async send(notification) {
-        console.log("Sending notification via mock provider:");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        console.log(`Email sent to ${notification.recipient}`);
+
+        const start = Date.now();
+
+        const delay =
+            Math.floor(Math.random() * 150) + 50;
+
+        await new Promise(resolve =>
+            setTimeout(resolve, delay)
+        );
+
+        return {
+            providerMessageId: crypto.randomUUID(),
+            provider: "mock",
+            latency: Date.now() - start,
+        };
+
     }
 }
 module.exports = MockProvider
