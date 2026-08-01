@@ -1,4 +1,6 @@
 const BaseEmailProvider = require("./base.provider");
+const crypto = require("crypto");
+const PROVIDERS = require("../../constants/provider.constants");
 
 class MockProvider extends BaseEmailProvider {
     async send(notification) {
@@ -13,11 +15,20 @@ class MockProvider extends BaseEmailProvider {
         );
 
         return {
-            providerMessageId: crypto.randomUUID(),
-            provider: "mock",
-            latency: Date.now() - start,
+
+            providerMessageId:
+                crypto.randomUUID(),
+
+            provider:
+                PROVIDERS.MOCK,
+
+            latency:
+                Date.now() - start,
+
         };
 
     }
+
+
 }
-module.exports = MockProvider
+module.exports = MockProvider   
