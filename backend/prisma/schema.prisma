@@ -44,7 +44,6 @@ model NotificationAttempt {
     startedAt          DateTime @default(now())
     completedAt        DateTime?
 
-    createdAt          DateTime @default(now())
     updatedAt          DateTime @updatedAt
 
     @@index([notificationId])
