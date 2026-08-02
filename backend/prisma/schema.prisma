@@ -12,10 +12,44 @@ model Notification {
   recipient  String
   title      String
   message    String
+  preferredProvider String
   status     String   @default("PENDING")
   createdAt  DateTime @default(now())
-
+  attempts NotificationAttempt[]
   idempotency Idempotency?
+}
+
+enum AttemptStatus {
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+model NotificationAttempt {
+    id                Int      @id @default(autoincrement())
+    notificationId     Int
+    notification      Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+    provider           String
+    attemptNumber      Int
+
+    status             AttemptStatus
+
+    providerMessageId  String?
+    latency            Int?
+
+    errorCode          String?
+    errorMessage       String?
+
+    startedAt          DateTime @default(now())
+    completedAt        DateTime?
+
+    createdAt          DateTime @default(now())
+    updatedAt          DateTime @updatedAt
+
+    @@index([notificationId])
+    @@index([status, updatedAt])
+    @@unique([notificationId, attemptNumber])
 }
 
 model Idempotency {
