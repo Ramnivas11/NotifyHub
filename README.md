@@ -1,111 +1,109 @@
 # NotifyHub Backend
 
-NotifyHub is a high-throughput, asynchronous notification dispatch service featuring multi-channel routing, database-backed request idempotency, validation, and queue-based execution.
+NotifyHub is a high-throughput, asynchronous notification dispatch service featuring multi-channel routing, database-backed request idempotency, Zod schema validation, transactional execution, and queue-based delivery.
 
 ---
 
-## Production Architecture Overview
+## 🏛️ Production Architecture & Layered Workflow
 
 Directly sending notifications during a standard HTTP request-response cycle presents two critical production bottlenecks:
 1. **Network Latency:** External dispatch gateways (Email/SMS APIs) are slow, causing API delays for clients.
-2. **System Outages:** If a downstream gateway goes down, notifications are lost.
+2. **System Outages:** If a downstream gateway goes down, requests fail or get lost.
 
-NotifyHub resolves this by decoupling **API Request Ingestion** from **Notification Dispatching** using an asynchronous queue:
+NotifyHub resolves this by enforcing a strict single execution path:
+**Controller → Service → Queue → Worker → NotificationProcessor → ProviderFactory → Provider**
+
+```
+ ┌─────────────┐       ┌─────────────────┐       ┌────────────────────┐
+ │ Client      │ ───>  │ Controller      │ ───>  │ Service            │
+ └─────────────┘       └─────────────────┘       └────────────────────┘
+                                                           │
+                                                           ▼
+ ┌─────────────┐       ┌─────────────────┐       ┌────────────────────┐
+ │ Worker      │ <───  │ BullMQ Queue    │ <───  │ PostgreSQL (Prisma)│
+ └─────────────┘       └─────────────────┘       └────────────────────┘
+        │
+        ▼
+ ┌──────────────────────┐       ┌─────────────────┐       ┌────────────────────┐
+ │NotificationProcessor │ ───>  │ ProviderFactory │ ───>  │ Provider (Mock/    │
+ └──────────────────────┘       └─────────────────┘       │ Resend, etc.)      │
+        │                                                 └────────────────────┘
+        ▼
+ ┌──────────────────────┐
+ │ Atomic Tx (DB Update)│
+ └──────────────────────┘
+```
 
 ### 1. Ingestion Phase (Fast & Safe)
-*   **Sub-Millisecond Ingestion:** The Express API server acts as a rapid buffer. It validates the payload, locks the `idempotency-key` in PostgreSQL to prevent duplicate delivery, logs a `PENDING` record, queues a light job pointer in Redis, and immediately returns `201 Created`.
-*   **Idempotency Protection:** The server hashes the request payload. Duplicate requests are served cached responses instantly or blocked if the original is still processing.
+* **Sub-Millisecond Ingestion:** The Express API server acts as a rapid buffer. It validates the payload using Zod, verifies and locks the `idempotency-key` in PostgreSQL to prevent duplicate delivery, saves a `PENDING` record, enqueues a job pointer in Redis via BullMQ, and immediately returns `201 Created`.
+* **Idempotency Protection:** The server hashes the request payload. Duplicate requests are served cached responses instantly or blocked if the original is still processing.
 
 ### 2. Dispatch Phase (Reliable & Asynchronous)
-*   **Worker Isolation:** Separate background worker threads pull jobs from Redis (BullMQ). Slow external systems only block the workers, leaving the main web server responsive.
-*   **Outage Resilience:** If a gateway fails, BullMQ automatically schedules retries using exponential backoff. The database tracks the state machine transition: `PENDING` $\rightarrow$ `PROCESSING` $\rightarrow$ `SENT` (or `FAILED` after exhausting retries).
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client
-    participant API as Express Server
-    participant DB as PostgreSQL (Prisma)
-    participant Queue as Redis (BullMQ)
-    participant Worker as Worker Thread
-    participant Gateway as External Provider
-
-    Client->>API: POST /notifications (with idempotency-key)
-    activate API
-    API->>DB: Verify & lock idempotency key
-    DB-->>API: Key approved (Status: Processing)
-    API->>DB: Log Notification (Status: Pending)
-    API->>Queue: Enqueue Dispatch Job
-    API->>DB: Update Idempotency (Status: Completed)
-    API-->>Client: 201 Created (Acknowledgment)
-    deactivate API
-
-    Note over Worker, Queue: Asynchronous Delivery
-    Worker->>Queue: Poll job
-    activate Worker
-    Worker->>DB: Update Notification (Status: Processing)
-    Worker->>Gateway: Dispatch notification payload
-    Gateway-->>Worker: Success delivery metadata
-    Worker->>DB: Update Notification (Status: Sent)
-    Worker-->>Queue: Ack job
-    deactivate Worker
-```
+* **Worker & Processor Separation:** A thin BullMQ worker listens for jobs and delegates orchestration directly to `NotificationProcessor`.
+* **Atomic Transactions:** The processor creates an immutable `NotificationAttempt` record, resolves the singleton provider via `ProviderFactory`, invokes the provider's `send()` method, and uses a single Prisma transaction (`prisma.$transaction`) to update both `Notification` and `NotificationAttempt` statuses atomically (`SENT` or `FAILED`).
 
 ---
 
-## Tech Stack & Project Layout
+## 🛠️ Tech Stack & Directory Structure
 
-*   **Runtime & Framework:** Node.js (v18+) & Express (v5)
-*   **Database & ORM:** PostgreSQL & Prisma ORM
-*   **Queue Architecture:** Redis & BullMQ
-*   **Request Schema Validation:** Zod
+* **Runtime & Framework:** Node.js (v18+) & Express (v5)
+* **Database & ORM:** PostgreSQL & Prisma ORM (with `NotificationStatus` enum)
+* **Queue Architecture:** Redis & BullMQ
+* **Request Schema Validation:** Zod
+* **Logging:** Structured Logger utility
 
 ```text
 backend/
-├── prisma/               # Schema definitions and migrations
+├── prisma/               # Prisma schema definitions and database migrations
 ├── src/
-│   ├── config/           # Redis configurations
-│   ├── constants/        # System-wide constant configurations
+│   ├── config/           # Redis connection configuration
+│   ├── constants/        # System constants (error codes, providers, idempotency)
 │   ├── controllers/      # Route controllers (health, notifications)
-│   ├── middleware/       # Logger, errors, validation, and idempotency
-│   ├── providers/        # Extensible notification dispatch gateways
+│   ├── errors/           # Custom error classes (ProviderError, Permanent, Retryable)
+│   ├── lib/              # Prisma client singleton instance
+│   ├── middleware/       # Logger, error handler, validation, and idempotency
+│   ├── processors/       # Orchestration layer (notification.processor.js)
+│   ├── providers/        # Extensible gateway providers (email/mock, resend, factory)
 │   ├── queues/           # BullMQ queue instantiations
-│   ├── routes/           # Express router endpoints
-│   ├── services/         # Core business logic and database hooks
-│   ├── utils/            # Shared utilities (hashing, error wrappers)
+│   ├── routes/           # Express router definitions
+│   ├── services/         # Pure entity services (notification, notificationAttempt, idempotency)
+│   ├── utils/            # Shared utilities (logger, hashing, AppError, asyncHandler)
 │   ├── validations/      # Request validation schemas (Zod)
-│   └── workers/          # Background worker definitions
+│   └── workers/          # BullMQ background worker (notification.worker.js)
 ```
 
 ---
 
-## Core System Protocols
+## 🔐 Core System Features
 
 ### 1. Request Idempotency
-To prevent duplicate processing:
-*   Requests must include an `idempotency-key` header (UUID recommended).
-*   Requests with matching keys and payload hashes are served cached responses on success (`200 OK`) or rejected with a conflict error (`409 Conflict`) if currently processing.
+* Requests must include an `idempotency-key` header (UUID or unique string recommended).
+* Matching keys with identical payload hashes return cached responses (`200 OK`).
+* Payload mismatches return a structured `422 Unprocessable Entity` response.
 
-### 2. Queue-based Resiliency
-*   Failed jobs undergo **exponential backoff** (5 attempts, starting with a 5-second delay).
-*   Job states transition to database records: `PENDING` -> `PROCESSING` -> `SENT` (or `FAILED` on exhaustive retries).
+### 2. Notification Status Lifecycle
+Notifications transition through strict enum states (`NotificationStatus`):
+- `PENDING`: Created in database and enqueued into BullMQ.
+- `PROCESSING`: Attempt initialized and being dispatched by provider.
+- `SENT`: Provider confirmed successful delivery.
+- `FAILED`: Delivery failed after attempt.
 
 ---
 
-## API Documentation
+## 📡 API Documentation
 
 ### Endpoints Directory
 
 | Method | Endpoint | Headers / Payload | Description | Status Codes |
 | :--- | :--- | :--- | :--- | :--- |
 | **GET** | `/` | None | Service health check | `200` |
-| **POST** | `/notifications` | Header: `idempotency-key` <br> Body: `NotificationPayload` | Queue a notification | `201`, `400`, `409`, `500` |
-| **GET** | `/notifications` | None | List notification history (desc) | `200` |
-| **GET** | `/notifications/:id` | None | Fetch notification logs by ID | `200`, `404` |
-| **PATCH**| `/notifications/:id/status` | Body: `{ "status": String }` | Manually alter notification status | `200` |
-| **DELETE**| `/notifications/:id` | None | Delete notification log | `200` |
+| **POST** | `/notifications` | Header: `idempotency-key` <br> Body: `NotificationPayload` | Queue a notification for delivery | `201`, `400`, `422`, `500` |
+| **GET** | `/notifications` | None | List all notifications (descending order) | `200` |
+| **GET** | `/notifications/:id` | None | Fetch notification by ID | `200`, `404` |
+| **PATCH**| `/notifications/:id/status` | Body: `{ "status": "SENT" }` | Update notification status | `200` |
+| **DELETE**| `/notifications/:id` | None | Delete notification record | `200` |
 
-### Delivery Request Example
+### Sample Delivery Request
 `POST /notifications`
 
 ```bash
@@ -115,41 +113,49 @@ curl -X POST http://localhost:3000/notifications \
   -d '{
     "channel": "email",
     "recipient": "user@example.com",
-    "title": "Welcome!",
-    "message": "Hello from NotifyHub."
+    "title": "Welcome to NotifyHub",
+    "message": "Thank you for joining our platform!",
+    "preferredProvider": "mock"
   }'
 ```
 
 ---
 
-## Setup & Execution
+## ⚙️ Setup & Local Development
 
-### 1. Environment Configurations
-Define a `.env` file in the `backend/` directory:
+### 1. Environment Configuration
+Create a `.env` file in the `backend/` directory:
 ```env
 PORT=3000
 NODE_ENV=development
 DATABASE_URL="postgresql://<user>:<password>@<host>:<port>/<dbname>?sslmode=require"
-REDIS_HOST="localhost"
+REDIS_HOST="127.0.0.1"
 REDIS_PORT=6379
 REDIS_DB=0
+DEFAULT_PROVIDER="mock"
 ```
 
-### 2. Build & Startup Pipeline
+### 2. Execution Commands
 
 ```bash
+# Navigate to backend directory
+cd backend
+
 # Install dependencies
 npm install
 
-# Start local Redis container
+# Start Redis (via Docker)
 docker-compose up -d
 
-# Push database schema migrations
+# Sync PostgreSQL schema with Prisma
 npx prisma db push
 
-# Start the API server
+# Generate Prisma Client
+npx prisma generate
+
+# Start Express API Server (Terminal 1)
 npm run dev
 
-# Start the background worker process (separate terminal)
+# Start BullMQ Worker (Terminal 2)
 npm run worker
 ```
