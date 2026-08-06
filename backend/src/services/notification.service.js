@@ -2,16 +2,17 @@ const idempotencyService = require("./idempotency.service");
 const prisma = require("../lib/prisma");
 const AppError = require("../utils/AppError");
 const notificationQueue = require("../queues/notification.queue");
-const notificationService = require("./notification.service");
-const notificationAttemptService =
-    require("./notificationAttempt.service");
+const logger = require("../utils/logger");
 
 const createNotification = async (notificationData, idempotency = null) => {
     let notification = null;
 
     try {
         notification = await prisma.notification.create({
-            data: notificationData,
+            data: {
+                preferredProvider: "mock",
+                ...notificationData,
+            },
         });
 
         await notificationQueue.add(
@@ -20,7 +21,7 @@ const createNotification = async (notificationData, idempotency = null) => {
                 notificationId: notification.id,
             },
             {
-                jobId: notification.id,
+                jobId: `notification-${notification.id}`,
             }
         );
 
@@ -44,10 +45,9 @@ const createNotification = async (notificationData, idempotency = null) => {
             try {
                 await idempotencyService.failRequest(idempotency.key, err);
             } catch (cleanupErr) {
-                console.error(
-                    "Failed to mark idempotency request as failed",
-                    cleanupErr
-                );
+                logger.error("Failed to mark idempotency request as failed", {
+                    error: cleanupErr.message,
+                });
             }
         }
 
@@ -55,9 +55,9 @@ const createNotification = async (notificationData, idempotency = null) => {
             try {
                 await updateStatus(prisma, notification.id, "FAILED");
             } catch (cleanupErr) {
-                console.error(
+                logger.error(
                     `Failed to update notification ${notification.id} status to FAILED`,
-                    cleanupErr
+                    { error: cleanupErr.message }
                 );
             }
         }

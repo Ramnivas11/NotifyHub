@@ -1,4 +1,5 @@
 const prisma = require("../lib/prisma");
+const AppError = require("../utils/AppError");
 const {
     IDEMPOTENCY_ACTION,
     IDEMPOTENCY_STATUS,
@@ -8,7 +9,9 @@ const {
 class IdempotencyService {
     async beginRequest(key, requestHash) {
         try {
-            const expiresAt = new Date(Date.now() + IDEMPOTENCY_EXPIRY.HOURS * 60 * 60 * 1000);
+            const expiresAt = new Date(
+                Date.now() + IDEMPOTENCY_EXPIRY.HOURS * 60 * 60 * 1000
+            );
             const record = await prisma.idempotency.create({
                 data: {
                     key,
@@ -24,7 +27,7 @@ class IdempotencyService {
                 record,
             };
         } catch (err) {
-            //p2002 is unique constraint violation
+            // P2002 is unique constraint violation (key already exists)
             if (err.code !== "P2002") {
                 throw err;
             }
@@ -34,11 +37,14 @@ class IdempotencyService {
             });
 
             if (!record) {
-                throw new Error("IDEMPOTENCY_RECORD_NOT_FOUND");
+                throw new AppError("IDEMPOTENCY_RECORD_NOT_FOUND", 404);
             }
 
             if (record.requestHash !== requestHash) {
-                throw new Error("IDEMPOTENCY_HASH_MISMATCH");
+                throw new AppError(
+                    "Idempotency key payload mismatch: The same idempotency key was used with a different request body.",
+                    422
+                );
             }
 
             switch (record.status) {
@@ -61,8 +67,9 @@ class IdempotencyService {
                     };
 
                 default:
-                    throw new Error(
-                        `Unknown idempotency status: ${record.status}`
+                    throw new AppError(
+                        `Unknown idempotency status: ${record.status}`,
+                        500
                     );
             }
         }
@@ -87,9 +94,7 @@ class IdempotencyService {
             data: {
                 status: IDEMPOTENCY_STATUS.FAILED,
                 lastError:
-                    error instanceof Error
-                        ? error.message
-                        : String(error),
+                    error instanceof Error ? error.message : String(error),
             },
         });
     }
