@@ -1,39 +1,38 @@
 require("dotenv").config();
 
-const processor =
-    require("../processors/notification.processor");
 const { Worker } = require("bullmq");
-const notificationService = require("../services/notification.service");
-const ProviderFactory = require("../providers/email/provider.factory")
+const processor = require("../processors/notification.processor");
 const redis = require("../config/redis");
-const prisma = require("../lib/prisma");
+const logger = require("../utils/logger");
 
 const worker = new Worker(
     "notification-queue",
     async (job) => {
-        console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.log("📥 Job Received");
-        console.log(job.id);
-        console.log(job.data);
-        await processor.process(
-            job.data.notificationId
-        );
+        logger.info("Job received by worker", {
+            jobId: job.id,
+            notificationId: job.data?.notificationId,
+        });
+
+        await processor.process(job.data.notificationId);
     },
-
     {
-        connection: redis
+        connection: redis,
     }
-)
+);
+
 worker.on("completed", (job) => {
-
-    console.log(`✅ Job ${job.id} completed`);
-
+    logger.info("Worker job completed", {
+        jobId: job.id,
+        notificationId: job.data?.notificationId,
+    });
 });
 
 worker.on("failed", (job, err) => {
-
-    console.log(`❌ Job ${job?.id} failed`);
-
-    console.error(err.message);
-
+    logger.error("Worker job failed", {
+        jobId: job?.id,
+        notificationId: job?.data?.notificationId,
+        error: err.message,
+    });
 });
+
+module.exports = worker;
