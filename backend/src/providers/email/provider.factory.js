@@ -5,18 +5,20 @@ const PROVIDERS = require("../../constants/provider.constants");
 const PermanentProviderError = require("../../errors/permanent-provider.error");
 const ERROR_CODES = require("../../constants/error-codes");
 
-const providers = {
+const providerInstances = {
     [PROVIDERS.MOCK]: new MockProvider(),
     [PROVIDERS.RESEND]: new ResendProvider(),
 };
 
 class ProviderFactory {
     static getProvider(providerName) {
-        const provider = providers[providerName];
+        const targetProvider =
+            providerName || process.env.DEFAULT_PROVIDER || PROVIDERS.MOCK;
+        const provider = providerInstances[targetProvider];
 
         if (!provider) {
             throw new PermanentProviderError(
-                `Unsupported provider: ${providerName}`,
+                `Unsupported provider: ${targetProvider}`,
                 {
                     code: ERROR_CODES.UNSUPPORTED_PROVIDER,
                 }

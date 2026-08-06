@@ -1,8 +1,15 @@
-class ResendProvider {
+const BaseEmailProvider = require("./base.provider");
+const PROVIDERS = require("../../constants/provider.constants");
 
+class ResendProvider extends BaseEmailProvider {
     constructor() {
-        this.client = new Resend(process.env.RESEND_API_KEY);
+        super();
+        this.name = PROVIDERS.RESEND;
     }
 
+    async send(notification) {
+        throw new Error("ResendProvider send() not fully implemented yet.");
+    }
 }
 
+module.exports = ResendProvider;
