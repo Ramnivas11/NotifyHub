@@ -1,5 +1,7 @@
 require("dotenv").config();
 
+const processor =
+    require("../processors/notification.processor");
 const { Worker } = require("bullmq");
 const notificationService = require("../services/notification.service");
 const ProviderFactory = require("../providers/email/provider.factory")
@@ -13,8 +15,9 @@ const worker = new Worker(
         console.log("📥 Job Received");
         console.log(job.id);
         console.log(job.data);
-        const provider = ProviderFactory.getProvider();
-        await notificationService.processNotification(job.data.notificationId, provider);
+        await processor.process(
+            job.data.notificationId
+        );
     },
 
     {
