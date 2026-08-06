@@ -8,27 +8,20 @@ const providerFactory = require("../providers/email/provider.factory");
 class NotificationProcessor {
     async process(notificationId) {
 
-        // 1. Fetch notification
-        const notification = await notificationService.getById(
-            notificationId
-        );
+        // 1. Load notification
+        const notification = await notificationService.getById(notificationId);
 
-        if (!notification) {
-            throw new Error("Notification not found.");
-        }
-
-        // 2. Already sent?
+        // 2. Already processed
         if (notification.status === "SENT") {
             return;
         }
 
-        // 3. Get provider
-        const provider =
-            providerFactory.getProvider(
-                notification.preferredProvider
-            );
+        // 3. Resolve provider
+        const provider = providerFactory.getProvider(
+            notification.preferredProvider
+        );
 
-        // 4. Create Attempt
+        // 4. Create immutable attempt
         const attempt =
             await notificationAttemptService.createAttempt(
                 prisma,
@@ -38,17 +31,16 @@ class NotificationProcessor {
 
         try {
 
-            // 5. Send Email
-            const result =
-                await provider.send(notification);
+            // 5. Send notification
+            const providerResult = await provider.send(notification);
 
-            // 6. Update DB
+            // 6. Persist success atomically
             await prisma.$transaction(async (tx) => {
 
                 await notificationAttemptService.markSuccess(
                     tx,
                     attempt.id,
-                    result
+                    providerResult
                 );
 
                 await notificationService.markSent(
@@ -60,6 +52,7 @@ class NotificationProcessor {
 
         } catch (error) {
 
+            // 7. Persist failure atomically
             await prisma.$transaction(async (tx) => {
 
                 await notificationAttemptService.markFailed(

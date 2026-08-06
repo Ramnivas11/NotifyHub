@@ -1,47 +1,43 @@
 const AppError = require("../utils/AppError");
-const { Prisma } = require("@prisma/client");
 
-async function getNextAttemptNumber(db, notificationId) {
-    const lastAttempt = await db.notification.findFirst({
+const getNextAttemptNumber = async (db, notificationId) => {
+    const lastAttempt = await db.notificationAttempt.findFirst({
         where: {
             notificationId,
-        }, orderBy: {
+        },
+        orderBy: {
             attemptNumber: "desc",
         },
         select: {
             attemptNumber: true,
-        }
-    })
+        },
+    });
+
     return lastAttempt
         ? lastAttempt.attemptNumber + 1
         : 1;
-}
+};
 
-async function createAttempt(db, notificationId, provider) {
+const createAttempt = async (
+    db,
+    notificationId,
+    provider
+) => {
     const attemptNumber =
         await getNextAttemptNumber(
             db,
             notificationId
         );
-    const attempt =
-        await db.notificationAttempt.create({
 
-            data: {
-
-                notificationId,
-
-                provider,
-
-                attemptNumber,
-
-                status: "PROCESSING",
-
-            },
-
-        });
-    return attempt;
-}
-
+    return db.notificationAttempt.create({
+        data: {
+            notificationId,
+            provider,
+            attemptNumber,
+            status: "PROCESSING",
+        },
+    });
+};
 
 const markSuccess = async (
     db,
@@ -49,43 +45,17 @@ const markSuccess = async (
     providerResult
 ) => {
 
-    const attempt =
-        await db.notificationAttempt.findUnique({
-            where: {
-                id: attemptId,
-            },
-            select: {
-                notificationId: true,
-            },
-        });
-
-    if (!attempt) {
-        throw new AppError(
-            "Attempt not found",
-            404
-        );
-    }
-
-    await db.notificationAttempt.update({
+    return db.notificationAttempt.update({
         where: {
             id: attemptId,
         },
         data: {
-            status: AttemptStatus.SUCCESS,
+            status: "SUCCESS",
             providerMessageId:
                 providerResult.providerMessageId,
             latency:
                 providerResult.latency,
             completedAt: new Date(),
-        },
-    });
-
-    await db.notification.update({
-        where: {
-            id: attempt.notificationId,
-        },
-        data: {
-            status: NotificationStatus.SENT,
         },
     });
 
@@ -97,50 +67,50 @@ const markFailed = async (
     error
 ) => {
 
-    const attempt =
-        await db.notificationAttempt.findUnique({
-            where: {
-                id: attemptId,
-            },
-            select: {
-                notificationId: true,
-            },
-        });
-
-    if (!attempt) {
-        throw new AppError(
-            "Attempt not found",
-            404
-        );
-    }
-
-    await db.notificationAttempt.update({
+    return db.notificationAttempt.update({
         where: {
             id: attemptId,
         },
         data: {
-            status: AttemptStatus.FAILED,
-            errorCode: error.code,
-            errorMessage: error.message,
+            status: "FAILED",
+            errorCode:
+                error.code ?? "UNKNOWN_ERROR",
+            errorMessage:
+                error.message,
             completedAt: new Date(),
-        },
-    });
-
-    await db.notification.update({
-        where: {
-            id: attempt.notificationId,
-        },
-        data: {
-            status: NotificationStatus.FAILED,
         },
     });
 
 };
 
+const getAttemptById = async (
+    db,
+    attemptId
+) => {
+
+    const attempt =
+        await db.notificationAttempt.findUnique({
+
+            where: {
+                id: attemptId,
+            },
+
+        });
+
+    if (!attempt) {
+        throw new AppError(
+            "Notification attempt not found",
+            404
+        );
+    }
+
+    return attempt;
+};
 
 module.exports = {
     createAttempt,
-    getNextAttemptNumber,
     markSuccess,
-    markFailed
+    markFailed,
+    getNextAttemptNumber,
+    getAttemptById,
 };

@@ -2,6 +2,9 @@ const idempotencyService = require("./idempotency.service");
 const prisma = require("../lib/prisma");
 const AppError = require("../utils/AppError");
 const notificationQueue = require("../queues/notification.queue");
+const notificationService = require("./notification.service");
+const notificationAttemptService =
+    require("./notificationAttempt.service");
 
 const createNotification = async (notificationData, idempotency = null) => {
     let notification = null;
@@ -50,7 +53,7 @@ const createNotification = async (notificationData, idempotency = null) => {
 
         if (notification?.id) {
             try {
-                await updateNotificationStatus(notification.id, "FAILED");
+                await updateStatus(prisma, notification.id, "FAILED");
             } catch (cleanupErr) {
                 console.error(
                     `Failed to update notification ${notification.id} status to FAILED`,
@@ -64,105 +67,65 @@ const createNotification = async (notificationData, idempotency = null) => {
 };
 
 const getAllNotifications = async () => {
-
     return prisma.notification.findMany({
         orderBy: {
             createdAt: "desc",
         },
     });
-
 };
-const getNotificationById = async (notificationId) => {
-    const notification = await prisma.notification.findUnique(({
+
+const getById = async (notificationId) => {
+    const notification = await prisma.notification.findUnique({
         where: {
-            id: notificationId
-        }
-    }))
+            id: notificationId,
+        },
+    });
+
     if (!notification) {
         throw new AppError("Notification not found", 404);
     }
-    return notification
-}
 
-const updateNotificationStatus = async (notificationId, status) => {
-    const notification = await prisma.notification.update({
+    return notification;
+};
+
+const updateStatus = async (db, notificationId, status) => {
+    return db.notification.update({
         where: {
             id: notificationId,
         },
         data: {
             status,
         },
-    })
-    return notification
+    });
+};
 
-}
+const markProcessing = async (db, notificationId) => {
+    return updateStatus(db, notificationId, "PROCESSING");
+};
+
+const markSent = async (db, notificationId) => {
+    return updateStatus(db, notificationId, "SENT");
+};
+
+const markFailed = async (db, notificationId) => {
+    return updateStatus(db, notificationId, "FAILED");
+};
 
 const deleteNotification = async (notificationId) => {
-    const notification = await prisma.notification.delete({
+    return prisma.notification.delete({
         where: {
             id: notificationId,
-        }
-    })
-
-    return notification
-}
-async function processNotification(notificationId, provider) {
-    try {
-
-        const [notification] = await prisma.notification.updateManyAndReturn({
-            where: {
-                id: notificationId,
-                status: "PENDING",
-            },
-            data: {
-                status: "PROCESSING",
-            },
-        })
-        if (!notification) {
-            return {
-                message: "Notification already being processed or already completed",
-            };
-        }
-
-        console.log(
-            `📨 Sending notification ${notification.id} to ${notification.recipient}`
-        );
-        try {
-            const ProviderFactory = require("../providers/email/provider.factory");
-            const provider = ProviderFactory.getProvider();
-            const result = await provider.send(notification);
-            console.log("✅ Notification sent successfully:", result.providerMessageId);
-            await updateNotificationStatus(notificationId, "SENT");
-        } catch (error) {
-            await updateNotificationStatus(notificationId, "FAILED");
-            throw error;
-        }
-
-        return {
-            success: true,
-            message: "Notification processed successfully",
-        };
-    } catch (err) {
-        try {
-            await updateNotificationStatus(notificationId, "FAILED");
-        } catch (updateErr) {
-            console.error(
-                `Failed to update notification ${notificationId} to FAILED`,
-                updateErr
-            );
-        }
-
-        throw err;
-    }
-}
-
-
+        },
+    });
+};
 
 module.exports = {
     createNotification,
     getAllNotifications,
-    getNotificationById,
-    updateNotificationStatus,
+    getById,
+    updateStatus,
+    markProcessing,
+    markSent,
+    markFailed,
     deleteNotification,
-    processNotification
 };
