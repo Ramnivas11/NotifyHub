@@ -24,6 +24,11 @@ const createNotificationSchema = z.object({
         .trim()
         .min(1, "Message is required")
         .max(1000),
+
+    preferredProvider: z
+        .string()
+        .optional()
+        .default("mock"),
 });
 
 module.exports = {

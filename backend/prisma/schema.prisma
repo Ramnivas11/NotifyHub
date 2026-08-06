@@ -12,11 +12,18 @@ model Notification {
   recipient  String
   title      String
   message    String
-  preferredProvider String
-  status     String   @default("PENDING")
-  createdAt  DateTime @default(now())
+  preferredProvider String             @default("mock")
+  status     NotificationStatus @default(PENDING)
+  createdAt  DateTime           @default(now())
   attempts NotificationAttempt[]
   idempotency Idempotency?
+}
+
+enum NotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
 }
 
 enum AttemptStatus {
