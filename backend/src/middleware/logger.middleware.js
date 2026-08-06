@@ -1,6 +1,8 @@
-const logger = (req, res, next) => {
-    console.log(`${req.method} ${req.originalUrl}`);
+const logger = require("../utils/logger");
+
+const requestLogger = (req, res, next) => {
+    logger.info(`${req.method} ${req.originalUrl}`);
     next();
 };
 
-module.exports = logger;    
+module.exports = requestLogger;
