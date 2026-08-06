@@ -7,18 +7,21 @@ NotifyHub is a high-throughput, asynchronous notification dispatch service featu
 ## Production Architecture Overview
 
 Directly sending notifications during a standard HTTP request-response cycle presents two critical production bottlenecks:
+
 1. **Network Latency:** External dispatch gateways (Email/SMS APIs) are slow, causing API delays for clients.
 2. **System Outages:** If a downstream gateway goes down, notifications are lost.
 
 NotifyHub resolves this by decoupling **API Request Ingestion** from **Notification Dispatching** using an asynchronous queue and single orchestration layer (`NotificationProcessor`):
 
 ### 1. Ingestion Phase (Fast & Safe)
-* **Sub-Millisecond Ingestion:** The Express API server acts as a rapid buffer. It validates the payload with Zod, locks the `idempotency-key` in PostgreSQL to prevent duplicate delivery, logs a `PENDING` record, queues a light job pointer in Redis (`notification-{id}`), and immediately returns `201 Created`.
-* **Idempotency Protection:** The server hashes the request payload. Duplicate requests are served cached responses instantly or blocked if the original is still processing.
+
+- **Sub-Millisecond Ingestion:** The Express API server acts as a rapid buffer. It validates the payload with Zod, locks the `idempotency-key` in PostgreSQL to prevent duplicate delivery, logs a `PENDING` record, queues a light job pointer in Redis (`notification-{id}`), and immediately returns `201 Created`.
+- **Idempotency Protection:** The server hashes the request payload. Duplicate requests are served cached responses instantly or blocked if the original is still processing.
 
 ### 2. Dispatch Phase (Reliable & Asynchronous)
-* **Worker & Processor Separation:** Separate thin background worker threads pull jobs from Redis (BullMQ) and delegate orchestration directly to `NotificationProcessor`. Slow external systems only block workers, leaving the main web server responsive.
-* **Outage Resilience & Atomic Transactions:** The processor creates an immutable `NotificationAttempt` record, resolves the provider via `ProviderFactory`, dispatches the payload, and uses a Prisma transaction (`prisma.$transaction`) to update both `Notification` and `NotificationAttempt` statuses atomically. If a gateway fails, BullMQ automatically schedules retries using exponential backoff. The database tracks state machine transitions: `PENDING` $\rightarrow$ `PROCESSING` $\rightarrow$ `SENT` (or `FAILED` after exhausting retries).
+
+- **Worker & Processor Separation:** Separate thin background worker threads pull jobs from Redis (BullMQ) and delegate orchestration directly to `NotificationProcessor`. Slow external systems only block workers, leaving the main web server responsive.
+- **Outage Resilience & Atomic Transactions:** The processor creates an immutable `NotificationAttempt` record, resolves the provider via `ProviderFactory`, dispatches the payload, and uses a Prisma transaction (`prisma.$transaction`) to update both `Notification` and `NotificationAttempt` statuses atomically. If a gateway fails, BullMQ automatically schedules retries using exponential backoff. The database tracks state machine transitions: `PENDING` $\rightarrow$ `PROCESSING` $\rightarrow$ `SENT` (or `FAILED` after exhausting retries).
 
 ```mermaid
 sequenceDiagram
@@ -65,11 +68,11 @@ sequenceDiagram
 
 ## Tech Stack & Project Layout
 
-* **Runtime & Framework:** Node.js (v18+) & Express (v5)
-* **Database & ORM:** PostgreSQL & Prisma ORM (with `NotificationStatus` enum)
-* **Queue Architecture:** Redis & BullMQ
-* **Request Schema Validation:** Zod
-* **Logger:** Structured Logger utility (`src/utils/logger.js`)
+- **Runtime & Framework:** Node.js (v18+) & Express (v5)
+- **Database & ORM:** PostgreSQL & Prisma ORM (with `NotificationStatus` enum)
+- **Queue Architecture:** Redis & BullMQ
+- **Request Schema Validation:** Zod
+- **Logger:** Structured Logger utility (`src/utils/logger.js`)
 
 ```text
 backend/
@@ -96,19 +99,22 @@ backend/
 ## Core System Protocols
 
 ### 1. Request Idempotency
+
 To prevent duplicate processing:
-* Requests must include an `idempotency-key` header (UUID recommended).
-* Requests with matching keys and payload hashes are served cached responses on success (`200 OK`) or rejected with a conflict error (`409 Conflict`) if currently processing.
-* Payload mismatches return a structured `422 Unprocessable Entity` error.
+
+- Requests must include an `idempotency-key` header (UUID recommended).
+- Requests with matching keys and payload hashes are served cached responses on success (`200 OK`) or rejected with a conflict error (`409 Conflict`) if currently processing.
+- Payload mismatches return a structured `422 Unprocessable Entity` error.
 
 ### 2. Notification Status Lifecycle & Queue Resiliency
-* Notifications transition through strict Prisma enum states (`NotificationStatus`):
+
+- Notifications transition through strict Prisma enum states (`NotificationStatus`):
   - `PENDING`: Saved to database and queued in BullMQ.
   - `PROCESSING`: Picked up by worker and attempt initiated.
   - `SENT`: Successfully dispatched by provider.
   - `FAILED`: Delivery failed after execution.
-* Each execution attempt creates an immutable `NotificationAttempt` record (`PROCESSING`, `SUCCESS`, `FAILED`) tracking latency, provider message IDs, and error codes.
-* Failed jobs undergo **exponential backoff** retries.
+- Each execution attempt creates an immutable `NotificationAttempt` record (`PROCESSING`, `SUCCESS`, `FAILED`) tracking latency, provider message IDs, and error codes.
+- Failed jobs undergo **exponential backoff** retries.
 
 ---
 
@@ -116,16 +122,17 @@ To prevent duplicate processing:
 
 ### Endpoints Directory
 
-| Method | Endpoint | Headers / Payload | Description | Status Codes |
-| :--- | :--- | :--- | :--- | :--- |
-| **GET** | `/` | None | Service health check | `200` |
-| **POST** | `/notifications` | Header: `idempotency-key` <br> Body: `NotificationPayload` | Queue a notification | `201`, `400`, `409`, `422`, `500` |
-| **GET** | `/notifications` | None | List notification history (desc) | `200` |
-| **GET** | `/notifications/:id` | None | Fetch notification logs by ID | `200`, `404` |
-| **PATCH**| `/notifications/:id/status` | Body: `{ "status": String }` | Manually alter notification status | `200` |
-| **DELETE**| `/notifications/:id` | None | Delete notification log | `200` |
+| Method     | Endpoint                    | Headers / Payload                                          | Description                        | Status Codes                      |
+| :--------- | :-------------------------- | :--------------------------------------------------------- | :--------------------------------- | :-------------------------------- |
+| **GET**    | `/`                         | None                                                       | Service health check               | `200`                             |
+| **POST**   | `/notifications`            | Header: `idempotency-key` <br> Body: `NotificationPayload` | Queue a notification               | `201`, `400`, `409`, `422`, `500` |
+| **GET**    | `/notifications`            | None                                                       | List notification history (desc)   | `200`                             |
+| **GET**    | `/notifications/:id`        | None                                                       | Fetch notification logs by ID      | `200`, `404`                      |
+| **PATCH**  | `/notifications/:id/status` | Body: `{ "status": String }`                               | Manually alter notification status | `200`                             |
+| **DELETE** | `/notifications/:id`        | None                                                       | Delete notification log            | `200`                             |
 
 ### Delivery Request Example
+
 `POST /notifications`
 
 ```bash
@@ -137,7 +144,7 @@ curl -X POST http://localhost:3000/notifications \
     "recipient": "user@example.com",
     "title": "Welcome!",
     "message": "Hello from NotifyHub.",
-    "preferredProvider": "mock"
+    "preferredProvider": "email"
   }'
 ```
 
@@ -146,7 +153,9 @@ curl -X POST http://localhost:3000/notifications \
 ## Setup & Execution
 
 ### 1. Environment Configurations
+
 Define a `.env` file in the `backend/` directory:
+
 ```env
 PORT=3000
 NODE_ENV=development
