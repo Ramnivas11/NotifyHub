@@ -2,6 +2,11 @@ const { Resend } = require("resend");
 
 const BaseEmailProvider = require("./base.provider");
 const env = require("../../config/env");
+const RetryableProviderError =
+    require("../../errors/retryable-provider.error");
+
+const PermanentProviderError =
+    require("../../errors/permanent-provider.error");
 
 const PROVIDERS = require("../../constants/provider.constants");
 
@@ -37,7 +42,9 @@ class ResendProvider extends BaseEmailProvider {
         const { data, error } = await this.client.emails.send(payload);
 
         if (error) {
-            throw error;
+
+            this.translateError(error);
+
         }
 
         return {
@@ -48,6 +55,44 @@ class ResendProvider extends BaseEmailProvider {
             latency: Date.now() - start,
         };
     }
+
+    translateError(error) {
+
+        const status =
+            error?.statusCode ||
+            error?.status ||
+            500;
+
+        if (
+            status === 429 ||
+            status >= 500
+        ) {
+
+            throw new RetryableProviderError(
+
+                error.message,
+
+                this.name,
+
+                status
+
+            );
+
+        }
+
+        throw new PermanentProviderError(
+
+            error.message,
+
+            this.name,
+
+            status
+
+        );
+
+    }
+
+
 }
 
 module.exports = ResendProvider;
