@@ -23,6 +23,33 @@ const getStuckAttempts = async () => {
     });
 };
 
+const claimStuckAttempt = async (
+    db,
+    attemptId,
+    cutoffTime
+) => {
+    const result =
+        await db.notificationAttempt.updateMany({
+            where: {
+                id: attemptId,
+                status: "PROCESSING",
+                updatedAt: {
+                    lt: cutoffTime,
+                },
+            },
+            data: {
+                status: "FAILED",
+                errorCode: "RECOVERY_TIMEOUT",
+                errorMessage:
+                    "Notification attempt exceeded the recovery threshold.",
+                completedAt: new Date(),
+            },
+        });
+
+    return result.count === 1;
+};
+
 module.exports = {
     getStuckAttempts,
+    claimStuckAttempt,
 };
