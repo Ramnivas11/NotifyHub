@@ -4,7 +4,9 @@ const env = require("../config/env");
 const getStuckAttempts = async () => {
     const cutoffTime = new Date(
         Date.now() -
-        env.RECOVERY_THRESHOLD_MINUTES * 60 * 1000
+        env.RECOVERY_THRESHOLD_MINUTES *
+        60 *
+        1000
     );
 
     return prisma.notificationAttempt.findMany({
@@ -24,12 +26,11 @@ const getStuckAttempts = async () => {
 };
 
 const claimStuckAttempt = async (
-    db,
     attemptId,
     cutoffTime
 ) => {
     const result =
-        await db.notificationAttempt.updateMany({
+        await prisma.notificationAttempt.updateMany({
             where: {
                 id: attemptId,
                 status: "PROCESSING",
