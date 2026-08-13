@@ -1,6 +1,7 @@
 const { Worker } = require("bullmq");
 
 const redis = require("../config/redis");
+const env = require("../config/env");
 
 const notificationRecoveryService =
     require("../services/notificationRecovery.service");
@@ -8,12 +9,9 @@ const notificationRecoveryService =
 const notificationProcessor =
     require("../processors/notification.processor");
 
-const env = require("../config/env");
-
 const worker = new Worker(
     "notification-recovery",
     async (job) => {
-
         console.log(
             `🔄 Recovery job started: ${job.id}`
         );
@@ -21,6 +19,14 @@ const worker = new Worker(
         const attempts =
             await notificationRecoveryService
                 .getStuckAttempts();
+
+        if (attempts.length === 0) {
+            console.log(
+                "✅ No stuck notification attempts found."
+            );
+
+            return;
+        }
 
         console.log(
             `🔍 Found ${attempts.length} stuck attempts`
@@ -33,32 +39,59 @@ const worker = new Worker(
             1000
         );
 
-        for (const attempt of attempts) {
+        let recovered = 0;
+        let skipped = 0;
+        let failed = 0;
 
-            const claimed =
-                await notificationRecoveryService
-                    .claimStuckAttempt(
-                        null,
-                        attempt.id,
-                        cutoffTime
+        for (const attempt of attempts) {
+            try {
+                const claimed =
+                    await notificationRecoveryService
+                        .claimStuckAttempt(
+                            attempt.id,
+                            cutoffTime
+                        );
+
+                if (!claimed) {
+                    skipped++;
+
+                    console.log(
+                        `⏭️ Attempt ${attempt.id} was already handled.`
                     );
 
-            if (!claimed) {
+                    continue;
+                }
+
                 console.log(
-                    `⏭️ Attempt ${attempt.id} was already handled`
+                    `♻️ Recovering notification ${attempt.notificationId}`
                 );
 
-                continue;
+                await notificationProcessor.process(
+                    attempt.notificationId
+                );
+
+                recovered++;
+
+                console.log(
+                    `✅ Notification ${attempt.notificationId} recovered successfully.`
+                );
+            } catch (error) {
+                failed++;
+
+                console.error(
+                    `❌ Failed to recover notification ${attempt.notificationId}`,
+                    {
+                        attemptId: attempt.id,
+                        errorCode: error.code,
+                        errorMessage: error.message,
+                    }
+                );
             }
-
-            console.log(
-                `♻️ Recovering notification ${attempt.notificationId}`
-            );
-
-            await notificationProcessor.process(
-                attempt.notificationId
-            );
         }
+
+        console.log(
+            `📊 Recovery summary | recovered=${recovered} skipped=${skipped} failed=${failed}`
+        );
     },
     {
         connection: redis,

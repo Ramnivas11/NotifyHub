@@ -1,9 +1,28 @@
-require("dotenv").config();
-require("./src/config/redis.js");
-const app = require("./src/app");
+const app = require("./app");
+const env = require("./config/env");
 
-const PORT = process.env.PORT || 3000;
+const scheduleRecovery =
+    require("./queues/recovery.scheduler");
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+const PORT = env.PORT || 3000;
+
+const startServer = async () => {
+    try {
+        await scheduleRecovery();
+
+        app.listen(PORT, () => {
+            console.log(
+                `🚀 NotifyHub running on port ${PORT}`
+            );
+        });
+    } catch (error) {
+        console.error(
+            "❌ Failed to start NotifyHub",
+            error
+        );
+
+        process.exit(1);
+    }
+};
+
+startServer();

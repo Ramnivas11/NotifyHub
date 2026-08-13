@@ -8,6 +8,7 @@ const requiredEnvVariables = [
     "EMAIL_FROM",
     "EMAIL_PROVIDER",
     "RECOVERY_THRESHOLD_MINUTES",
+    "PORT",
 ];
 
 for (const variable of requiredEnvVariables) {
@@ -35,4 +36,5 @@ module.exports = {
 
     RECOVERY_THRESHOLD_MINUTES:
         Number(process.env.RECOVERY_THRESHOLD_MINUTES),
+    PORT: Number(process.env.PORT || 3000),
 };
