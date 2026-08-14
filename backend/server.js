@@ -1,8 +1,9 @@
-const app = require("./app");
-const env = require("./config/env");
+const app = require("./src/app");
+const env = require("./src/config/env");
 
 const scheduleRecovery =
-    require("./queues/recovery.scheduler");
+    require("./src/queues/recovery.scheduler");
+
 
 const PORT = env.PORT || 3000;
 

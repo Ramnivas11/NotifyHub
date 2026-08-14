@@ -1,7 +1,7 @@
 const { Worker } = require("bullmq");
 
-const redis = require("../config/redis");
 const env = require("../config/env");
+const redis = require("../config/redis");
 
 const notificationRecoveryService =
     require("../services/notificationRecovery.service");
