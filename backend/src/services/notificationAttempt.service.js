@@ -1,5 +1,7 @@
 const AppError = require("../utils/AppError");
 
+const MAX_ATTEMPT_NUMBER_RETRIES = 3;
+
 const getNextAttemptNumber = async (db, notificationId) => {
     const lastAttempt = await db.notificationAttempt.findFirst({
         where: {
@@ -16,17 +18,50 @@ const getNextAttemptNumber = async (db, notificationId) => {
     return lastAttempt ? lastAttempt.attemptNumber + 1 : 1;
 };
 
-const createAttempt = async (db, notificationId, provider) => {
-    const attemptNumber = await getNextAttemptNumber(db, notificationId);
+const isAttemptNumberConflict = (error) => {
+    return (
+        error?.code === "P2002" &&
+        Array.isArray(error?.meta?.target) &&
+        error.meta.target.includes("notificationId") &&
+        error.meta.target.includes("attemptNumber")
+    );
+};
 
-    return db.notificationAttempt.create({
-        data: {
-            notificationId,
-            provider,
-            attemptNumber,
-            status: "PROCESSING",
-        },
-    });
+const createAttempt = async (db, notificationId, provider) => {
+    for (
+        let retry = 0;
+        retry < MAX_ATTEMPT_NUMBER_RETRIES;
+        retry++
+    ) {
+        const attemptNumber = await getNextAttemptNumber(
+            db,
+            notificationId
+        );
+
+        try {
+            return await db.notificationAttempt.create({
+                data: {
+                    notificationId,
+                    provider,
+                    attemptNumber,
+                    status: "PROCESSING",
+                },
+            });
+        } catch (error) {
+            if (!isAttemptNumberConflict(error)) {
+                throw error;
+            }
+
+            if (retry === MAX_ATTEMPT_NUMBER_RETRIES - 1) {
+                throw error;
+            }
+        }
+    }
+
+    throw new AppError(
+        "Failed to create notification attempt",
+        500
+    );
 };
 
 const markSuccess = async (db, attemptId, providerResult) => {
@@ -65,7 +100,10 @@ const getAttemptById = async (db, attemptId) => {
     });
 
     if (!attempt) {
-        throw new AppError("Notification attempt not found", 404);
+        throw new AppError(
+            "Notification attempt not found",
+            404
+        );
     }
 
     return attempt;
