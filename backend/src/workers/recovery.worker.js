@@ -2,6 +2,7 @@ const { Worker } = require("bullmq");
 
 const env = require("../config/env");
 const redis = require("../config/redis");
+const logger = require("../utils/logger");
 
 const notificationRecoveryService =
     require("../services/notificationRecovery.service");
@@ -12,25 +13,22 @@ const notificationProcessor =
 const worker = new Worker(
     "notification-recovery",
     async (job) => {
-        console.log(
-            `🔄 Recovery job started: ${job.id}`
-        );
+        logger.info("Recovery job started", {
+            jobId: job.id,
+        });
 
         const attempts =
             await notificationRecoveryService
                 .getStuckAttempts();
 
         if (attempts.length === 0) {
-            console.log(
-                "✅ No stuck notification attempts found."
-            );
-
+            logger.info("No stuck notification attempts found.");
             return;
         }
 
-        console.log(
-            `🔍 Found ${attempts.length} stuck attempts`
-        );
+        logger.info(`Found ${attempts.length} stuck attempts`, {
+            count: attempts.length,
+        });
 
         const cutoffTime = new Date(
             Date.now() -
@@ -54,17 +52,16 @@ const worker = new Worker(
 
                 if (!claimed) {
                     skipped++;
-
-                    console.log(
-                        `⏭️ Attempt ${attempt.id} was already handled.`
-                    );
-
+                    logger.info("Attempt was already handled, skipping", {
+                        attemptId: attempt.id,
+                    });
                     continue;
                 }
 
-                console.log(
-                    `♻️ Recovering notification ${attempt.notificationId}`
-                );
+                logger.info("Recovering notification", {
+                    attemptId: attempt.id,
+                    notificationId: attempt.notificationId,
+                });
 
                 await notificationProcessor.process(
                     attempt.notificationId
@@ -72,26 +69,28 @@ const worker = new Worker(
 
                 recovered++;
 
-                console.log(
-                    `✅ Notification ${attempt.notificationId} recovered successfully.`
-                );
+                logger.info("Notification recovered successfully", {
+                    attemptId: attempt.id,
+                    notificationId: attempt.notificationId,
+                });
             } catch (error) {
                 failed++;
 
-                console.error(
-                    `❌ Failed to recover notification ${attempt.notificationId}`,
-                    {
-                        attemptId: attempt.id,
-                        errorCode: error.code,
-                        errorMessage: error.message,
-                    }
-                );
+                logger.error("Failed to recover notification", {
+                    attemptId: attempt.id,
+                    notificationId: attempt.notificationId,
+                    errorCode: error.code,
+                    errorMessage: error.message,
+                });
             }
         }
 
-        console.log(
-            `📊 Recovery summary | recovered=${recovered} skipped=${skipped} failed=${failed}`
-        );
+        logger.info("Recovery summary", {
+            recovered,
+            skipped,
+            failed,
+            total: attempts.length,
+        });
     },
     {
         connection: redis,
@@ -100,16 +99,16 @@ const worker = new Worker(
 );
 
 worker.on("completed", (job) => {
-    console.log(
-        `✅ Recovery job ${job.id} completed`
-    );
+    logger.info("Recovery job completed", {
+        jobId: job.id,
+    });
 });
 
 worker.on("failed", (job, error) => {
-    console.error(
-        `❌ Recovery job ${job?.id} failed`,
-        error
-    );
+    logger.error("Recovery job failed", {
+        jobId: job?.id,
+        error: error.message,
+    });
 });
 
 module.exports = worker;
