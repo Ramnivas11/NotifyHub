@@ -1,7 +1,8 @@
 const prisma = require("../lib/prisma");
 const notificationService = require("../services/notification.service");
 const notificationAttemptService = require("../services/notificationAttempt.service");
-const providerFactory = require("../providers/email/provider.factory");
+const providerRoutingService =
+    require("../services/providerRouting.service");
 const logger = require("../utils/logger");
 
 class NotificationProcessor {
@@ -28,8 +29,8 @@ class NotificationProcessor {
 
         // 3. Resolve provider
         const provider =
-            providerFactory.getProvider(
-                notification.preferredProvider
+            await providerRoutingService.getProvider(
+                notification
             );
 
         // 4. Create immutable attempt

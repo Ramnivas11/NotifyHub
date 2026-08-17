@@ -3,6 +3,11 @@ const prisma = require("../lib/prisma");
 const AppError = require("../utils/AppError");
 const notificationQueue = require("../queues/notification.queue");
 const logger = require("../utils/logger");
+const env = require("../config/env");
+
+const preferredProvider =
+    notificationData.preferredProvider ||
+    env.EMAIL_PROVIDER;
 
 const createNotification = async (notificationData, idempotency = null) => {
     let notification = null;
@@ -10,7 +15,7 @@ const createNotification = async (notificationData, idempotency = null) => {
     try {
         notification = await prisma.notification.create({
             data: {
-                preferredProvider: "mock",
+                preferredProvider,
                 ...notificationData,
             },
         });
