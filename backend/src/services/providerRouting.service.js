@@ -1,14 +1,11 @@
 const prisma = require("../lib/prisma");
 const env = require("../config/env");
 const providerFactory = require("../providers/email/provider.factory");
+const {
+    RETRYABLE_ERROR_CODES,
+} = require("../constants/retry.constants");
 
 const FALLBACK_THRESHOLD = 2;
-
-const RETRYABLE_ERROR_CODES = new Set([
-    "RATE_LIMITED",
-    "PROVIDER_UNAVAILABLE",
-    "NETWORK_TIMEOUT",
-]);
 
 const getRecentAttempts = async (notificationId) => {
     return prisma.notificationAttempt.findMany({
@@ -57,10 +54,15 @@ const shouldUseFallback = (
     );
 };
 
-const getProvider = async (notification) => {
-    const primaryProvider =
+const getPrimaryProvider = (notification) => {
+    return (
         notification.preferredProvider ||
-        env.EMAIL_PROVIDER;
+        env.EMAIL_PROVIDER
+    );
+};
+
+const getProvider = async (notification) => {
+    const primaryProvider = getPrimaryProvider(notification);
 
     const fallbackProvider =
         env.EMAIL_FALLBACK_PROVIDER;

@@ -1,0 +1,11 @@
+const ERROR_CODES = require("./error-codes");
+
+const RETRYABLE_ERROR_CODES = new Set([
+    ERROR_CODES.RATE_LIMITED,
+    ERROR_CODES.PROVIDER_UNAVAILABLE,
+    ERROR_CODES.NETWORK_TIMEOUT,
+]);
+
+module.exports = {
+    RETRYABLE_ERROR_CODES,
+};
