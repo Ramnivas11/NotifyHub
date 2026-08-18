@@ -4,7 +4,6 @@ const notificationService =
 const asyncHandler =
     require("../utils/asyncHandler");
 
-const prisma = require("../lib/prisma");
 
 const createNotification = asyncHandler(
     async (req, res) => {
@@ -74,25 +73,6 @@ const getNotification = asyncHandler(
     }
 );
 
-const updateNotificationStatus =
-    asyncHandler(async (req, res) => {
-        const notificationId =
-            Number(req.params.id);
-
-        const status = req.body.status;
-
-        const notification =
-            await notificationService.updateStatus(
-                prisma,
-                notificationId,
-                status
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: notification,
-        });
-    });
 
 const deleteNotification = asyncHandler(
     async (req, res) => {
@@ -116,6 +96,5 @@ module.exports = {
     createNotification,
     getAllNotifications,
     getNotification,
-    updateNotificationStatus,
     deleteNotification,
 };

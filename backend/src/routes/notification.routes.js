@@ -19,7 +19,6 @@ router.post(
     notificationController.createNotification
 );
 
-router.patch("/:id/status", notificationController.updateNotificationStatus);
 router.delete("/:id", notificationController.deleteNotification);
 
 
