@@ -1,64 +1,121 @@
-const notificationService = require("../services/notification.service");
-const asyncHandler = require("../utils/asyncHandler");
+const notificationService =
+    require("../services/notification.service");
+
+const asyncHandler =
+    require("../utils/asyncHandler");
+
 const prisma = require("../lib/prisma");
 
-const createNotification = asyncHandler(async (req, res) => {
-    const response = await notificationService.createNotification(
-        req.body,
-        req.idempotency
-    );
+const createNotification = asyncHandler(
+    async (req, res) => {
+        const response =
+            await notificationService.createNotification(
+                req.body,
+                req.idempotency
+            );
 
-    return res.status(201).json(response);
-});
+        return res.status(201).json(response);
+    }
+);
 
-const getAllNotifications = asyncHandler(async (req, res) => {
-    const notifications = await notificationService.getAllNotifications();
+const getAllNotifications = asyncHandler(
+    async (req, res) => {
+        const page = Math.max(
+            Number(req.query.page) || 1,
+            1
+        );
 
-    return res.json({
-        success: true,
-        data: notifications,
+        const limit = Math.min(
+            Math.max(
+                Number(req.query.limit) || 20,
+                1
+            ),
+            100
+        );
+
+        const {
+            status,
+            provider,
+        } = req.query;
+
+        const result =
+            await notificationService
+                .getAllNotifications({
+                    page,
+                    limit,
+                    status,
+                    provider,
+                });
+
+        return res.json({
+            success: true,
+            data: result.notifications,
+            pagination: result.pagination,
+        });
+    }
+);
+
+
+const getNotification = asyncHandler(
+    async (req, res) => {
+        const notificationId =
+            Number(req.params.id);
+
+        const notification =
+            await notificationService
+                .getByIdWithAttempts(
+                    notificationId
+                );
+
+        return res.status(200).json({
+            success: true,
+            data: notification,
+        });
+    }
+);
+
+const updateNotificationStatus =
+    asyncHandler(async (req, res) => {
+        const notificationId =
+            Number(req.params.id);
+
+        const status = req.body.status;
+
+        const notification =
+            await notificationService.updateStatus(
+                prisma,
+                notificationId,
+                status
+            );
+
+        return res.status(200).json({
+            success: true,
+            data: notification,
+        });
     });
-});
 
-const getNotificationById = asyncHandler(async (req, res) => {
-    const notificationId = Number(req.params.id);
-    const notification = await notificationService.getById(notificationId);
+const deleteNotification = asyncHandler(
+    async (req, res) => {
+        const notificationId =
+            Number(req.params.id);
 
-    return res.status(200).json({
-        success: true,
-        data: notification,
-    });
-});
+        await notificationService
+            .deleteNotification(
+                notificationId
+            );
 
-const updateNotificationStatus = asyncHandler(async (req, res) => {
-    const notificationId = Number(req.params.id);
-    const status = req.body.status;
-    const notification = await notificationService.updateStatus(
-        prisma,
-        notificationId,
-        status
-    );
-
-    return res.status(200).json({
-        success: true,
-        data: notification,
-    });
-});
-
-const deleteNotification = asyncHandler(async (req, res) => {
-    const notificationId = Number(req.params.id);
-    await notificationService.deleteNotification(notificationId);
-
-    return res.status(200).json({
-        success: true,
-        message: "Notification deleted successfully",
-    });
-});
+        return res.status(200).json({
+            success: true,
+            message:
+                "Notification deleted successfully",
+        });
+    }
+);
 
 module.exports = {
     createNotification,
     getAllNotifications,
-    getNotificationById,
+    getNotification,
     updateNotificationStatus,
     deleteNotification,
 };

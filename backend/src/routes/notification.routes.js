@@ -10,7 +10,7 @@ const notificationController = require("../controllers/notification.controller")
 const idempotencyMiddleware = require("../middleware/idempotency.middleware");
 
 router.get("/", notificationController.getAllNotifications);
-router.get("/:id", notificationController.getNotificationById);
+router.get("/:id", notificationController.getNotification);
 
 router.post(
     "/",

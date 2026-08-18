@@ -5,14 +5,14 @@ const notificationQueue = require("../queues/notification.queue");
 const logger = require("../utils/logger");
 const env = require("../config/env");
 
-const preferredProvider =
-    notificationData.preferredProvider ||
-    env.EMAIL_PROVIDER;
+
 
 const createNotification = async (notificationData, idempotency = null) => {
     let notification = null;
 
     try {
+        const preferredProvider =
+            notificationData.preferredProvider || env.EMAIL_PROVIDER;
         notification = await prisma.notification.create({
             data: {
                 preferredProvider,
@@ -71,12 +71,51 @@ const createNotification = async (notificationData, idempotency = null) => {
     }
 };
 
-const getAllNotifications = async () => {
-    return prisma.notification.findMany({
-        orderBy: {
-            createdAt: "desc",
+const getAllNotifications = async ({
+    page = 1,
+    limit = 20,
+    status,
+    provider,
+}) => {
+    const skip = (page - 1) * limit;
+
+    const where = {};
+
+    if (status) {
+        where.status = status;
+    }
+
+    if (provider) {
+        where.preferredProvider = provider;
+    }
+
+    const [notifications, total] =
+        await prisma.$transaction([
+            prisma.notification.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: {
+                    createdAt: "desc",
+                },
+            }),
+
+            prisma.notification.count({
+                where,
+            }),
+        ]);
+
+    return {
+        notifications,
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(
+                total / limit
+            ),
         },
-    });
+    };
 };
 
 const getById = async (notificationId) => {
@@ -92,6 +131,33 @@ const getById = async (notificationId) => {
 
     return notification;
 };
+
+
+const getByIdWithAttempts = async (notificationId) => {
+    const notification =
+        await prisma.notification.findUnique({
+            where: {
+                id: notificationId,
+            },
+            include: {
+                attempts: {
+                    orderBy: {
+                        attemptNumber: "asc",
+                    },
+                },
+            },
+        });
+
+    if (!notification) {
+        throw new AppError(
+            "Notification not found",
+            404
+        );
+    }
+
+    return notification;
+};
+
 
 const updateStatus = async (db, notificationId, status) => {
     return db.notification.update({
@@ -133,4 +199,5 @@ module.exports = {
     markSent,
     markFailed,
     deleteNotification,
+    getByIdWithAttempts,
 };
