@@ -163,6 +163,10 @@ const markProcessing = async (db, notificationId) => {
   return updateStatus(db, notificationId, "PROCESSING");
 };
 
+const markPending = async (db, notificationId) => {
+  return updateStatus(db, notificationId, "PENDING");
+};
+
 const markSent = async (db, notificationId) => {
   return updateStatus(db, notificationId, "SENT");
 };
@@ -208,6 +212,30 @@ const deleteNotification = async (notificationId) => {
   });
 };
 
+const claimNotification = async (notificationId) => {
+  const result = await prisma.notification.updateMany({
+    where: {
+      id: notificationId,
+      status: "PENDING",
+    },
+    data: {
+      status: "PROCESSING",
+    },
+  });
+
+  return result.count === 1;
+  /*
+  updateMany() returns something like:
+    {
+      count: 1
+    }
+    If the notification exists and is still pending:
+    PENDING → PROCESSING
+    then one row is updated:
+    result.count === 1 // true
+  */
+};
+
 module.exports = {
   createNotification,
   getAllNotifications,
@@ -215,7 +243,9 @@ module.exports = {
   updateStatus,
   markProcessing,
   markSent,
+  markPending,
   markFailed,
   deleteNotification,
   getByIdWithAttempts,
+  claimNotification,
 };
